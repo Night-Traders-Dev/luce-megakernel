@@ -24,7 +24,10 @@ Apple M5 Max               -         229         1.76
 
 ## Why this exists
 
-Conventional wisdom says NVIDIA GPUs are fast but wasteful, and Apple Silicon is slower but efficient. On paper, that checks out: llama.cpp on an RTX 3090 gets 267 tok/s at 350W (0.76 tok/J), while an M5 Max gets 229 tok/s at ~130W (1.76 tok/J). NVIDIA is faster, but 2.3x worse on efficiency.
+Conventional wisdom says NVIDIA GPUs are fast but power hungry, and Apple Silicon is slower but efficient. On paper, that checks out: llama.cpp on an RTX 3090 gets 267 tok/s at 350W (0.76 tok/J), while an M5 Max gets 229 tok/s at ~130W (1.76 tok/J). NVIDIA is faster, but 2.3x worse on efficiency.
+Qwen 3.5-0.8B uses a hybrid DeltaNet + Attention architecture (linear attention interleaved with standard attention). No fused kernel existed for this pattern. This is the first.
+
+Inspired by [Hazy Research's megakernel work on Llama-1B](https://hazyresearch.stanford.edu/blog/2025-05-27-no-bubbles), we asked: can the same idea work for hybrid DeltaNet/Attention models on consumer GPUs?
 
 We thought the problem was never the hardware. The RTX 3090 has 936 GB/s memory bandwidth and 142 TFLOPS FP16 compute. Extracting only 267 tok/s from that is a software problem.
 
@@ -133,7 +136,20 @@ sudo nvidia-smi -pl 220    # or whatever your target wattage
 | `bench_pp_tg.py` | Benchmark (prefill + decode) |
 | `RESULTS.md` | Full benchmark results and DVFS sweep |
 
-## Community
+## Scope and limitations
+
+This is a **research proof-of-concept**, not a production inference server.
+
+- **Batch size 1 only.** This targets single-user local inference (the llama.cpp/Ollama use case), not multi-tenant serving. If you need batched throughput, use vLLM or SGLang.
+- **Single model, single architecture.** The kernel is hand-written for Qwen 3.5-0.8B's specific layer pattern (18 DeltaNet + 6 Attention). It does not generalize to other models without rewriting.
+- **BF16 only.** No quantization support (GGUF/GPTQ/AWQ). We benchmark at BF16 to isolate kernel-level efficiency from quantization tradeoffs.
+- **0.8B parameters.** This is a small model. Megakernel fusion benefits shrink as model size grows and compute begins to dominate over launch overhead. We chose 0.8B because it's the first hybrid DeltaNet model available, not because it's representative of all workloads.
+- **Power methodology.** Efficiency numbers measure accelerator power only (NVML for NVIDIA, `powermetrics` for Apple), following [Hazy Research's Intelligence Per Watt](https://hazyresearch.stanford.edu/blog/2025-05-27-no-bubbles) methodology. Total system draw is higher for both platforms.
+- **Correctness.** The benchmark includes an end-to-end correctness check comparing megakernel output against a reference decode path. See `bench_pp_tg.py`.
+
+The goal is to demonstrate that architecture-specific kernel fusion eliminates a real efficiency gap on consumer hardware, and to do it in the open so others can reproduce, critique, and extend the work.
+
+## Files
 
 Questions, ideas, or want to see what others are building? Join the [Luce Discord](https://discord.gg/NjweHTtTVj).
 
@@ -149,6 +165,17 @@ If you use this work in your research:
   year   = {2026}
 }
 ```
+
+## Why llama.cpp as a baseline?
+
+llama.cpp is the most widely used local inference engine. It's what most people actually run on consumer GPUs. We also include PyTorch HuggingFace numbers (3.8x slower) for a second reference point. This is not a critique of llama.cpp, it's an excellent project. The comparison shows what architecture-specific optimization can unlock on top of a generic framework.
+
+## Why an RTX 3090?
+
+Deliberately chosen as the "worst case" for NVIDIA: a 2020 GPU, widely dismissed as power-hungry, available for ~$900-1,000 used. If the software gap is real on old hardware, it's even larger on newer cards.
+## Community
+
+Questions, ideas, or want to see what others are building? Join the [Luce Discord](https://discord.gg/NjweHTtTVj).
 
 ---
 
