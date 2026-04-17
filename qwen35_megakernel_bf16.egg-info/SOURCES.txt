@@ -1,0 +1,9 @@
+README.md
+kernel.cu
+prefill.cu
+setup.py
+torch_bindings.cpp
+qwen35_megakernel_bf16.egg-info/PKG-INFO
+qwen35_megakernel_bf16.egg-info/SOURCES.txt
+qwen35_megakernel_bf16.egg-info/dependency_links.txt
+qwen35_megakernel_bf16.egg-info/top_level.txt
