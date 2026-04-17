@@ -191,6 +191,10 @@ class Decoder:
 
     def step(self, token_id: int) -> int:
         """Decode one token. Returns next token id."""
+        if self._position >= MAX_SEQ_LEN:
+            raise ValueError(
+                f"decode position {self._position} exceeds MAX_SEQ_LEN={MAX_SEQ_LEN}"
+            )
         _decode(
             self._out_token, token_id,
             self._embed_weight, self._layer_weights_packed,
@@ -219,12 +223,19 @@ class Decoder:
     def generate(self, prompt: str, max_tokens: int = 100) -> str:
         self.reset()
         ids = self.tokenizer.encode(prompt, add_special_tokens=True)
+        if not ids:
+            return ""
+        if len(ids) > MAX_SEQ_LEN:
+            raise ValueError(
+                f"prompt length {len(ids)} exceeds MAX_SEQ_LEN={MAX_SEQ_LEN}"
+            )
         for tid in ids[:-1]:
             self.step(tid)
         out = []
         next_id = ids[-1]
         eos = self.tokenizer.eos_token_id
-        for _ in range(max_tokens):
+        max_steps = min(max_tokens, max(0, MAX_SEQ_LEN - len(ids) + 1))
+        for _ in range(max_steps):
             next_id = self.step(next_id)
             if next_id == eos:
                 break
